@@ -1,4 +1,3 @@
-// services/movieService.js
 export class MovieService {
     constructor(apiKey) {
         this.apiKey = apiKey;
@@ -23,8 +22,33 @@ export class MovieService {
             );
 
             const randomIndex = Math.floor(Math.random() * validMovies.length);
-            return validMovies[randomIndex];
+            const selectedMovie = validMovies[randomIndex];
+
+            // Fetch additional movie details
+            const [castData, details] = await Promise.all([
+                this.getMovieCredits(selectedMovie.id),
+                this.getMovieDetails(selectedMovie.id)
+            ]);
+
+            // Combine all the data
+            return {
+                ...selectedMovie,
+                cast: castData.cast.slice(0, 3),  // Top 3 cast members
+                director: castData.crew.find(c => c.job === 'Director'),
+                facts: [
+                    details.budget > 0 && `Budget: $${details.budget.toLocaleString()}`,
+                    details.revenue > 0 && `Box Office: $${details.revenue.toLocaleString()}`,
+                    details.production_countries?.length > 0 && 
+                        `Filmed in: ${details.production_countries.map(c => c.name).join(', ')}`,
+                    details.tagline && `Tagline: "${details.tagline}"`,
+                    details.runtime && `Runtime: ${details.runtime} minutes`
+                ].filter(Boolean), // Remove any undefined/null values
+                keywords: details.keywords?.keywords || [],
+                genres: details.genres || []
+            };
+
         } catch (error) {
+            console.error('Error fetching movie data:', error);
             throw new Error(`Failed to fetch random movie: ${error.message}`);
         }
     }
@@ -49,6 +73,24 @@ export class MovieService {
             throw new Error(`TMDB API error: ${response.status}`);
         }
         
+        return response.json();
+    }
+
+    async getMovieCredits(movieId) {
+        const url = `${this.baseUrl}/movie/${movieId}/credits?api_key=${this.apiKey}`;
+        const response = await fetch(url);
+        if (!response.ok) {
+            throw new Error(`TMDB API error: ${response.status}`);
+        }
+        return response.json();
+    }
+
+    async getMovieDetails(movieId) {
+        const url = `${this.baseUrl}/movie/${movieId}?api_key=${this.apiKey}&append_to_response=keywords`;
+        const response = await fetch(url);
+        if (!response.ok) {
+            throw new Error(`TMDB API error: ${response.status}`);
+        }
         return response.json();
     }
 }
